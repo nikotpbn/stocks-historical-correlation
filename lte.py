@@ -13,6 +13,7 @@ lqd nasdaq: https://www.nasdaq.com/market-activity/etf/lqd/historical
 """
 
 lqd_historical = read_csv("datasets/lqd_historical.csv")
+bnd_historical = read_csv("datasets/bnd_historical.csv")
 fed_historical = read_csv("datasets/fed_historical.csv")
 
 
@@ -25,22 +26,20 @@ def _transform_date(string, separator, format="MM-DD-YYYY"):
     return date(int(array[2]), int(array[0]), int(array[1]))
 
 
-def get_lqd_historical():
-    lqd_historical["Date"] = lqd_historical["Date"].apply(
-        lambda x: _transform_date(x, "/")
-    )
-    lqd_historical["Close/Last"] = lqd_historical["Close/Last"].apply(
+def _transform_etf_historical(data):
+    data["Date"] = data["Date"].apply(lambda x: _transform_date(x, "/"))
+    data["Close/Last"] = data["Close/Last"].apply(
         lambda x: Decimal(x).quantize(Decimal("0.01"))
     )
-    lqd_historical.drop(columns=["Open", "High", "Low", "Volume"], inplace=True)
-    return lqd_historical
+    data.drop(columns=["Open", "High", "Low", "Volume"], inplace=True)
+    return data
 
 
-def get_fed_historical():
-    fed_historical["observation_date"] = fed_historical["observation_date"].apply(
+def _transform_fed_historical(data):
+    data["observation_date"] = data["observation_date"].apply(
         lambda x: _transform_date(x, "-", "YYYY-MM-DD")
     )
-    return fed_historical
+    return data
 
 
 def _normalize(data):
@@ -52,36 +51,35 @@ def _normalize(data):
 
 
 def get_chart_data():
-    fed = get_fed_historical()
-    lqd = get_lqd_historical()
+    fed = _transform_fed_historical(fed_historical)
+    lqd = _transform_etf_historical(lqd_historical)
+    bnd = _transform_etf_historical(bnd_historical)
 
-    fed_rates_list = []
-    dates_list = []
-    lqd_prices_list = []
+    df = pd.merge(left=fed, left_on="observation_date", right=lqd, right_on="Date")
+    df.drop(columns=["Date"], inplace=True)
+    df.rename(columns={"Close/Last": "lqd_prices"}, inplace=True)
 
-    for index, obj in fed_historical.iterrows():
-        year = obj["observation_date"].year
-        month = obj["observation_date"].month
+    df = pd.merge(left=df, left_on="observation_date", right=bnd, right_on="Date")
+    df.drop(columns=["Date"], inplace=True)
+    df.rename(columns={"Close/Last": "bnd_prices"}, inplace=True)
 
-        for index, row in lqd_historical.iterrows():
-            if obj["observation_date"] in dates_list:
-                break
+    return df
 
-            if row["Date"].year == year and row["Date"].month == month:
-                fed_rates_list.append(obj["FEDFUNDS"])
-                dates_list.append(obj["observation_date"])
-                lqd_prices_list.append(row["Close/Last"])
 
-    x = dates_list
-    y1, y2 = _normalize(fed_rates_list), _normalize(lqd_prices_list)
+def build_chart(df):
+
+    x = df["observation_date"]
+    y1, y2, y3 = (
+        _normalize(df["FEDFUNDS"]),
+        _normalize(df["lqd_prices"]),
+        _normalize(df["bnd_prices"]),
+    )
     plt.plot(x, y1, label="FEDFUNDS")
     plt.plot(x, y2, label="LQD")
-    plt.legend(loc="upper center",  bbox_to_anchor=(0.5, 1.1), ncols=2)
-    # fig, axs = plt.subplots(2)
-    # fig.suptitle('Vertically stacked subplots')
-    # axs[0].plot(dates_list, lqd_prices_list)
-    # axs[1].plot(dates_list, fed_rates_list)
+    plt.plot(x, y3, label="BND")
+    plt.legend(loc="upper center", bbox_to_anchor=(0.5, 1.1), ncols=3)
     plt.show()
 
 
-get_chart_data()
+df = get_chart_data()
+build_chart(df)
