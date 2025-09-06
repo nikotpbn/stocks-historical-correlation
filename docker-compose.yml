@@ -1,0 +1,15 @@
+services:
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    volumes:
+      - ./app:/app
+    environment:
+      - POLYGON_API_KEY=o9_MiAEMIlzAsUpP7UwNC6FDkpdrxdcQ
+    secrets:
+      - polygon_api_key
+
+secrets:
+  polygon_api_key:
+    file: ./secrets/polygon_api_key.txt
